@@ -1,5 +1,6 @@
 SRCS_DIR:=src
 BUILD_DIR:=bin
+INCLUDE_DIR:=include
 CURRENT_DIR := $(shell pwd)
 MKDIR=mkdir -p
 
@@ -11,7 +12,7 @@ CCSOURCES=$(wildcard $(SRCS_DIR)/*.c)
 all: directories servers
 
 servers: ${CCSOURCES}
-	$(CC) $(CFLAGS) ${SRCS_DIR}/sp_st_blocking.c include/http-parser/http_parser.c -o ${BUILD_DIR}/sp_st_blocking.c
+	$(CC) $(CFLAGS) ${SRCS_DIR}/sp_st_blocking.c ${INCLUDE_DIR}/http_parser.c -o ${BUILD_DIR}/sp_st_blocking
 
 directories:
 	${MKDIR} ${BUILD_DIR}
