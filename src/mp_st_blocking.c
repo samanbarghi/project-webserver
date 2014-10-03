@@ -1,4 +1,4 @@
-#include "sp_st_blocking.h"
+#include "mp_st_blocking.h"
 
 
 void make_path_from_url(const char* URL, char* file_path){
@@ -153,6 +153,9 @@ void intHandler(int sig){
 	close(ssockfd);
 	exit(1);
 }
+void chldHandler(int sig){
+	while (waitpid((pid_t)(-1), 0, WNOHANG) > 0) {}
+}
 
 /* handle connection after accept */
 void handle_connection(int csockfd){
@@ -182,6 +185,7 @@ void handle_connection(int csockfd){
 }
 
 int main() {
+	pid_t pid;
     struct sockaddr_in serv_addr; //structure containing an internet address
     bzero((char*) &serv_addr, sizeof(serv_addr));
 
@@ -192,6 +196,11 @@ int main() {
 
     //handle SIGINT to close the main socket
     signal(SIGINT, intHandler);
+    //handle SIGCHLD
+    if (signal(SIGCHLD, SIG_IGN) == SIG_ERR) {
+      perror(0);
+      exit(1);
+    }
 
     settings.on_url = on_url;
 
@@ -213,16 +222,23 @@ int main() {
 
         if (csockfd < 0) {
         	if(errno == EINTR)
-				continue;
-			else{
-				LOG_ERROR("Error on accept");
-				exit(1);
-			}
+        		continue;
+        	else{
+        		LOG_ERROR("Error on accept");
+            	exit(1);
+        	}
         }
 
-
-        handle_connection(csockfd);
-
+        //if we are in child
+        if( (pid = fork()) == 0){
+        	close(ssockfd); //close the listening socket in child
+        	handle_connection(csockfd);
+        	exit(0);
+       }else{
+    	   //in parent close the connected socket
+    	   //and continue listenting
+    	   close(csockfd);
+       }
     }
     close(ssockfd);
     return 0;
