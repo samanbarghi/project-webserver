@@ -1,5 +1,5 @@
+#include <pthread.h>
 #include "global.h"
-
 
 int ssockfd; //listens on ssockfd and new connection on csockfd
 
@@ -159,13 +159,12 @@ void intHandler(int sig){
 	close(ssockfd);
 	exit(1);
 }
-void chldHandler(int sig){
-	while (waitpid((pid_t)(-1), 0, WNOHANG) > 0) {}
-}
 
 /* handle connection after accept */
-void handle_connection(int csockfd){
+void *handle_connection(void *arg){
 
+	int* csockfd = (int*) arg;
+//	printf("Socket fd: %d\n", *csockfd);
     http_parser *parser = (http_parser *) malloc(sizeof(http_parser));
     http_parser_init(parser, HTTP_REQUEST);
 
@@ -175,23 +174,25 @@ void handle_connection(int csockfd){
     ssize_t nrecvd; //return value for for the read() and write() calls.
 
     //Since we only accept GET, just try to read INPUT_BUFFER_LENGTH
-    nrecvd = read_http_request(csockfd, buffer, INPUT_BUFFER_LENGTH -1);
+    nrecvd = read_http_request(*csockfd, buffer, INPUT_BUFFER_LENGTH -1);
     if(nrecvd<0)
     	LOG_ERROR("Error reading from socket");
 
 
     //pass the socket to http_parser
-    parser->data = (void *) &csockfd;
+    parser->data = (void *) csockfd;
     nparsed = http_parser_execute(parser, &settings, buffer, nrecvd);
     if(nparsed != nrecvd)
     	LOG_ERROR("Erorr in Parsing the request!");
 
-    close(csockfd);
+    close(*csockfd);
+    free(csockfd);
     free(parser);
+    pthread_exit(NULL);
 }
 
 int main() {
-	pid_t pid;
+	int rc;
     struct sockaddr_in serv_addr; //structure containing an internet address
     bzero((char*) &serv_addr, sizeof(serv_addr));
 
@@ -202,11 +203,7 @@ int main() {
 
     //handle SIGINT to close the main socket
     signal(SIGINT, intHandler);
-    //handle SIGCHLD
-    if (signal(SIGCHLD, SIG_IGN) == SIG_ERR) {
-      perror(0);
-      exit(1);
-    }
+
 
     settings.on_url = on_url;
 
@@ -224,9 +221,11 @@ int main() {
 
     listen(ssockfd, 128);
     while(1) {
-        int csockfd = accept(ssockfd, NULL, NULL);
+    	pthread_t thread;
+        int* csockfd =  malloc(sizeof(int));
+        *csockfd = accept(ssockfd, NULL, NULL);
 
-        if (csockfd < 0) {
+        if (*csockfd < 0) {
         	if(errno == EINTR)
         		continue;
         	else{
@@ -235,16 +234,9 @@ int main() {
         	}
         }
 
-        //if we are in child
-        if( (pid = fork()) == 0){
-        	close(ssockfd); //close the listening socket in child
-        	handle_connection(csockfd);
-        	exit(0);
-       }else{
-    	   //in parent close the connected socket
-    	   //and continue listenting
-    	   close(csockfd);
-       }
+        	rc = pthread_create(&thread, NULL, handle_connection, (void *)csockfd);
+//        	handle_connection(csockfd);
+
     }
     close(ssockfd);
     return 0;

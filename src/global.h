@@ -1,10 +1,9 @@
 /*
- * sp_st_blocking.h
+ * global.h
  *
- *  Created on: Oct 1, 2014
- *      Author: Saman Barghi
+ *  Created on: Oct 3, 2014
+ *      Author: saman
  */
-
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,13 +15,10 @@
 #include <errno.h>
 #include <sys/wait.h>
 
-
 #include "../include/http_parser.h"
 
-#ifndef SP_ST_BLOCKING_H_
-#define SP_ST_BLOCKING_H_
-
-
+#ifndef GLOBAL_H_
+#define GLOBAL_H_
 
 #define PORT 8800
 #define INPUT_BUFFER_LENGTH 4*1024 //4 KB
@@ -51,11 +47,4 @@
 #define LOGF(fmt, params...) printf(fmt "\n", params);
 #define LOG_ERROR(msg) perror(msg);
 
-
-
-int ssockfd; //listens on ssockfd and new connection on csockfd
-
-//http-parser settings (https://github.com/joyent/http-parser)
-http_parser_settings settings;
-
-#endif /* SP_ST_BLOCKING_H_ */
+#endif /* GLOBAL_H_ */

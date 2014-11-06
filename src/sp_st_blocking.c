@@ -1,5 +1,9 @@
-#include "sp_st_blocking.h"
+#include "global.h"
 
+int ssockfd; //listens on ssockfd and new connection on csockfd
+
+//http-parser settings (https://github.com/joyent/http-parser)
+http_parser_settings settings;
 
 void make_path_from_url(const char* URL, char* file_path){
 
