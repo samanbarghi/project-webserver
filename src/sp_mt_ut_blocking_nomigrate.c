@@ -1,5 +1,46 @@
-#include <pthread.h>
-#include "project_webserver_global.h"
+#include "/home/saman/Research/research-projects/uThread/include/uThread.h"
+#include "/home/saman/Research/research-projects/uThread/include/kThread.h"
+#include "/home/saman/Research/research-projects/uThread/include/Cluster.h"
+#include <netinet/in.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <strings.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <errno.h>
+#include <sys/wait.h>
+
+#include "../include/http_parser.h"
+
+#define PORT 8800
+#define INPUT_BUFFER_LENGTH 4*1024 //4 KB
+
+#define ROOT_FOLDER "/home/saman/tmp/www"
+
+/* HTTP responses*/
+#define RESPONSE_METHOD_NOT_ALLOWED "HTTP/1.1 405 Method Not Allowed\r\n"
+#define RESPONSE_NOT_FOUND "HTTP/1.0 404 Not Found\n" \
+                            "Content-type: text/html\n" \
+                            "\n" \
+                            "<html>\n" \
+                            " <body>\n" \
+                            "  <h1>Not Found</h1>\n" \
+                            "  <p>The requested URL was not found on this server.</p>\n" \
+                            " </body>\n" \
+                            "</html>\n"
+
+// To avoid complication only return a html files (a single index.html file will be servred)
+#define RESPONSE_OK "HTTP/1.0 200 OK\r\n" \
+                    "Content-type: text/html\r\n" \
+                    "\r\n"
+
+/* Logging */
+#define LOG(msg) puts(msg);
+#define LOGF(fmt, params...) printf(fmt "\n", params);
+#define LOG_ERROR(msg) perror(msg);
+
 
 int ssockfd; //listens on ssockfd and new connection on csockfd
 
@@ -38,7 +79,7 @@ ssize_t read_file_content(const char* file_path, char **buffer){
 	rewind(fp);
 
 	//Allocate memory for buffer
-	*buffer = calloc( 1, file_size + 1);
+	*buffer = (char*)calloc( 1, file_size + 1);
 	if(!*buffer){
 		fclose(fp);
 		LOG_ERROR("Error allocation buffer!");
@@ -63,7 +104,7 @@ ssize_t read_http_request(int fd, void *vptr, size_t n){
 	ssize_t nread;
 	char * ptr;
 
-	ptr = vptr;
+	ptr = (char *)vptr;
 	nleft = n;
 
     while(nleft >0){
@@ -89,11 +130,12 @@ ssize_t read_http_request(int fd, void *vptr, size_t n){
 }
 
 ssize_t writen(int fd, const void *vptr, size_t n){
+
 	size_t nleft;
 	ssize_t nwritten;
 	const char *ptr;
 
-	ptr = vptr;
+	ptr = (char*)vptr;
 	nleft = n;
 
 	while(nleft > 0){
@@ -164,6 +206,7 @@ void intHandler(int sig){
 void *handle_connection(void *arg){
 
 	int* csockfd = (int*) arg;
+//    sleep(1);
 //	printf("Socket fd: %d\n", *csockfd);
     http_parser *parser = (http_parser *) malloc(sizeof(http_parser));
     http_parser_init(parser, HTTP_REQUEST);
@@ -188,13 +231,18 @@ void *handle_connection(void *arg){
     close(*csockfd);
     free(csockfd);
     free(parser);
-    pthread_exit(NULL);
+    //pthread_exit(NULL);
 }
 
 int main() {
-	int rc;
+	//int rc;
     struct sockaddr_in serv_addr; //structure containing an internet address
     bzero((char*) &serv_addr, sizeof(serv_addr));
+
+    Cluster* cluster = new Cluster();
+    kThread kt(cluster);
+//    kThread kta(cluster);
+    //puts("This is test");
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -221,10 +269,11 @@ int main() {
 
     listen(ssockfd, 128);
     while(1) {
-    	pthread_t thread;
-        int* csockfd =  malloc(sizeof(int));
+    	//pthread_t thread;
+    	//printf("ACCEPT\n");
+        int* csockfd =  (int*)malloc(sizeof(int));
         *csockfd = accept(ssockfd, NULL, NULL);
-
+        //printf("ACCEPTED\n");
         if (*csockfd < 0) {
         	if(errno == EINTR)
         		continue;
@@ -233,8 +282,10 @@ int main() {
             	exit(1);
         	}
         }
-
-        	rc = pthread_create(&thread, NULL, handle_connection, (void *)csockfd);
+        	//rc = pthread_create(&thread, NULL, handle_connection, (void *)csockfd);
+        //	printf("Creating uThread\n");
+        uThread* ut = uThread::create((funcvoid1_t)handle_connection, (void*)csockfd, cluster);
+//        	printf("Thread Created\n");
 //        	handle_connection(csockfd);
 
     }

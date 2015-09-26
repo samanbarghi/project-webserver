@@ -4,7 +4,7 @@
  *  Created on: Oct 3, 2014
  *      Author: saman
  */
-#include "global.h"
+#include "project_webserver_global.h"
 #include "../include/ancillary.h"
 
 #ifndef MP_ST_BLOCKING_PREFORK_H_

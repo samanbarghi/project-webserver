@@ -1,4 +1,4 @@
-#include "global.h"
+#include "project_webserver_global.h"
 
 
 int ssockfd; //listens on ssockfd and new connection on csockfd
