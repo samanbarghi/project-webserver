@@ -15,11 +15,11 @@
 #define PORT 8800
 #define INPUT_BUFFER_LENGTH 4*1024 //4 KB
 
-#define ROOT_FOLDER "/home/saman/tmp/www"
+#define ROOT_FOLDER "/home/sbarghi/tmp/www"
 
 /* HTTP responses*/
 #define RESPONSE_METHOD_NOT_ALLOWED "HTTP/1.1 405 Method Not Allowed\r\n"
-#define RESPONSE_NOT_FOUND "HTTP/1.0 404 Not Found\n" \
+#define RESPONSE_NOT_FOUND "HTTP/1.1 404 Not Found\n" \
                             "Content-type: text/html\n" \
                             "\n" \
                             "<html>\n" \
@@ -30,9 +30,11 @@
                             "</html>\n"
 
 // To avoid complication only return a html files (a single index.html file will be servred)
-#define RESPONSE_OK "HTTP/1.0 200 OK\r\n" \
-                    "Content-type: text/html\r\n" \
+#define RESPONSE_OK "HTTP/1.1 200 OK\r\n" \
+                    "Content-Type: text/html\r\n" \
                     "\r\n"
+
+#define CONTENT "<p>Hello World!</p>"
 
 /* Logging */
 #define LOG(msg) puts(msg);
@@ -237,8 +239,9 @@ int main() {
     struct sockaddr_in serv_addr; //structure containing an internet address
     bzero((char*) &serv_addr, sizeof(serv_addr));
 
-    kThread kta(Cluster::getDefaultCluster());
-    kThread ktb(Cluster::getDefaultCluster());
+    Cluster cluster;
+    kThread kta(cluster);
+    kThread ktb(cluster);
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -258,7 +261,7 @@ int main() {
         sconn->listen(128);
         while(1) {
                 Connection* cconn  = sconn->accept((struct sockaddr*)nullptr, nullptr);
-                uThread::create()->start(Cluster::getDefaultCluster(), (void*)handle_connection, (void*)cconn);
+                uThread::create()->start(cluster, (void*)handle_connection, (void*)cconn);
         }
         sconn->close();
     }catch(std::system_error& error){
