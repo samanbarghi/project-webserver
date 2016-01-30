@@ -1,6 +1,4 @@
-#include "/home/saman/Research/uThreads/include/uThread.h"
-#include "/home/saman/Research/uThreads/include/kThread.h"
-#include "/home/saman/Research/uThreads/include/Cluster.h"
+#include "uThreads/uThreads.h"
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,7 +40,7 @@
 #define LOG_ERROR(msg) perror(msg);
 
 
-int ssockfd; //listens on ssockfd and new connection on csockfd
+Connection* sconn; //Server socket
 
 //http-parser settings (https://github.com/joyent/http-parser)
 http_parser_settings settings;
@@ -98,7 +96,7 @@ ssize_t read_file_content(const char* file_path, char **buffer){
 
 	return file_size;
 }
-ssize_t read_http_request(int fd, void *vptr, size_t n){
+ssize_t read_http_request(Connection& cconn, void *vptr, size_t n){
 
 	size_t nleft;
 	ssize_t nread;
@@ -108,7 +106,7 @@ ssize_t read_http_request(int fd, void *vptr, size_t n){
 	nleft = n;
 
     while(nleft >0){
-    	if( (nread = kThread::ioHandler->recv(fd, ptr, INPUT_BUFFER_LENGTH - 1, 0)) <0){
+    	if( (nread = cconn.recv( ptr, INPUT_BUFFER_LENGTH - 1, 0)) <0){
     		if (errno == EINTR)
     			nread =0;
     		else
@@ -129,7 +127,7 @@ ssize_t read_http_request(int fd, void *vptr, size_t n){
     return (n-nleft);
 }
 
-ssize_t writen(int fd, const void *vptr, size_t n){
+ssize_t writen(Connection& cconn, const void *vptr, size_t n){
 
 	size_t nleft;
 	ssize_t nwritten;
@@ -139,7 +137,7 @@ ssize_t writen(int fd, const void *vptr, size_t n){
 	nleft = n;
 
 	while(nleft > 0){
-		if( (nwritten = kThread::ioHandler->send(fd, ptr, nleft, 0)) <= 0){
+		if( (nwritten = cconn.send(ptr, nleft, 0)) <= 0){
 			if(errno == EINTR)
 				nwritten = 0; /* If interrupted system call => call the write again */
 			else
@@ -162,7 +160,7 @@ ssize_t writen(int fd, const void *vptr, size_t n){
 int on_url(http_parser* parser, const char* header, long unsigned int size){
     //We only handle GET Requests
     char URL[size];
-    int* sockfd = (int*)parser->data;
+    Connection* cconn= (Connection*)parser->data;
     ssize_t file_size ;
     char* buffer; //buffer used to read file
 
@@ -181,33 +179,32 @@ int on_url(http_parser* parser, const char* header, long unsigned int size){
         //If we fail to open the file, simply return 404 !
         if(file_size == -1){
 
-            writen(*sockfd, RESPONSE_NOT_FOUND, sizeof(RESPONSE_NOT_FOUND));
+            writen(*cconn, RESPONSE_NOT_FOUND, sizeof(RESPONSE_NOT_FOUND));
         }else{
         	//If file exists write the response type and file content to socket
-        	writen(*sockfd, RESPONSE_OK, sizeof(RESPONSE_OK));
-        	writen(*sockfd, buffer, file_size);
+        	writen(*cconn, RESPONSE_OK, sizeof(RESPONSE_OK));
+        	writen(*cconn, buffer, file_size);
         	free(buffer); //buffer is being calloced inside read_file_content
         }
 
     }else{
         //Method is not allowed
-        writen(*sockfd, RESPONSE_METHOD_NOT_ALLOWED, sizeof(RESPONSE_METHOD_NOT_ALLOWED));
+        writen(*cconn, RESPONSE_METHOD_NOT_ALLOWED, sizeof(RESPONSE_METHOD_NOT_ALLOWED));
     }
 
     return 0;
 }
 
 void intHandler(int sig){
-	close(ssockfd);
+    sconn->close();
 	exit(1);
 }
 
 /* handle connection after accept */
 void *handle_connection(void *arg){
 
-	int* csockfd = (int*) arg;
-//    sleep(1);
-//	printf("Socket fd: %d\n", *csockfd);
+	Connection* cconn= (Connection*) arg;
+
     http_parser *parser = (http_parser *) malloc(sizeof(http_parser));
     http_parser_init(parser, HTTP_REQUEST);
 
@@ -217,85 +214,58 @@ void *handle_connection(void *arg){
     ssize_t nrecvd; //return value for for the read() and write() calls.
 
     //Since we only accept GET, just try to read INPUT_BUFFER_LENGTH
-    nrecvd = read_http_request(*csockfd, buffer, INPUT_BUFFER_LENGTH -1);
+    nrecvd = read_http_request(*cconn, buffer, INPUT_BUFFER_LENGTH -1);
     if(nrecvd<0){
     	LOG_ERROR("Error reading from socket");
-    	printf("fd %d", *csockfd);
+    	printf("fd %d", cconn->getFd());
     }
 
 
     //pass the socket to http_parser
-    parser->data = (void *) csockfd;
+    parser->data = (void *) cconn;
     nparsed = http_parser_execute(parser, &settings, buffer, nrecvd);
     if(nparsed != nrecvd)
     	LOG_ERROR("Erorr in Parsing the request!");
 
-    close(*csockfd);
-    free(csockfd);
+    cconn->close();
+    delete cconn;
     free(parser);
     //pthread_exit(NULL);
 }
 
 int main() {
-	//int rc;
     struct sockaddr_in serv_addr; //structure containing an internet address
     bzero((char*) &serv_addr, sizeof(serv_addr));
 
-    Cluster* cluster = new Cluster();
-    //kThread kt(cluster);
-    kThread kta(cluster);
-    kThread ktb(cluster);
-
-    //puts("This is test");
+    kThread kta(Cluster::getDefaultCluster());
+    kThread ktb(Cluster::getDefaultCluster());
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(PORT);
 
-
     //handle SIGINT to close the main socket
     signal(SIGINT, intHandler);
 
-
     settings.on_url = on_url;
+    try{
+        sconn = new Connection(AF_INET, SOCK_STREAM, 0);
 
-    ssockfd = socket(AF_INET, SOCK_STREAM, 0);
-    fcntl(ssockfd, F_SETFL, O_NONBLOCK);
-
-    if (ssockfd < 0) {
-        LOG_ERROR("ERROR opening socket");
-        exit(1);
-    }
-
-
-    if(bind(ssockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr))<0) {
-        LOG_ERROR("Error on binding");
-        exit(1);
-    };
-
-    listen(ssockfd, 128);
-    while(1) {
-    	//pthread_t thread;
-    	//printf("ACCEPT\n");
-        int* csockfd =  (int*)malloc(sizeof(int));
-        *csockfd = kThread::ioHandler->accept(ssockfd, NULL, NULL);
-        //printf("ACCEPTED\n");
-        if (*csockfd < 0) {
-        	if(errno == EINTR)
-        		continue;
-        	else{
-        		LOG_ERROR("Error on accept");
-            	exit(1);
-        	}
+        if(sconn->bind((struct sockaddr *) &serv_addr, sizeof(serv_addr))<0) {
+            LOG_ERROR("Error on binding");
+            exit(1);
+        };
+        sconn->listen(128);
+        while(1) {
+                Connection* cconn  = sconn->accept((struct sockaddr*)nullptr, nullptr);
+                uThread::create()->start(Cluster::getDefaultCluster(), (void*)handle_connection, (void*)cconn);
         }
-        	//rc = pthread_create(&thread, NULL, handle_connection, (void *)csockfd);
-        //	printf("Creating uThread\n");
-            fcntl(*csockfd, F_SETFL, O_NONBLOCK);
-        uThread* ut = uThread::create((funcvoid1_t)handle_connection, (void*)csockfd, cluster);
-//        	printf("Thread Created\n");
-//        	handle_connection(csockfd);
-
+        sconn->close();
+    }catch(std::system_error& error){
+        std::cout << "Error: " << error.code() << " - " << error.what() << '\n';
+        sconn->close();
     }
-    close(ssockfd);
+
+
     return 0;
 }
