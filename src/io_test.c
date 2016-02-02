@@ -15,7 +15,7 @@
 #define PORT 8800
 #define INPUT_BUFFER_LENGTH 4*1024 //4 KB
 
-#define ROOT_FOLDER "/home/sbarghi/tmp/www"
+#define ROOT_FOLDER "/home/saman/tmp/www"
 
 /* HTTP responses*/
 #define RESPONSE_METHOD_NOT_ALLOWED "HTTP/1.1 405 Method Not Allowed\r\n"
@@ -208,6 +208,8 @@ void *handle_connection(void *arg){
 	Connection* cconn= (Connection*) arg;
 
     http_parser *parser = (http_parser *) malloc(sizeof(http_parser));
+    if(parser == nullptr)
+        exit(1);
     http_parser_init(parser, HTTP_REQUEST);
 
     char buffer[INPUT_BUFFER_LENGTH]; //read buffer from the socket
@@ -239,9 +241,9 @@ int main() {
     struct sockaddr_in serv_addr; //structure containing an internet address
     bzero((char*) &serv_addr, sizeof(serv_addr));
 
-    Cluster cluster;
-    kThread kta(cluster);
-    kThread ktb(cluster);
+    //Cluster cluster;
+    kThread kta(Cluster::getDefaultCluster());
+    kThread ktb(Cluster::getDefaultCluster());
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -261,7 +263,7 @@ int main() {
         sconn->listen(128);
         while(1) {
                 Connection* cconn  = sconn->accept((struct sockaddr*)nullptr, nullptr);
-                uThread::create()->start(cluster, (void*)handle_connection, (void*)cconn);
+                uThread::create()->start(Cluster::getDefaultCluster(), (void*)handle_connection, (void*)cconn);
         }
         sconn->close();
     }catch(std::system_error& error){
