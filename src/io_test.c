@@ -15,7 +15,7 @@
 #define PORT 8800
 #define INPUT_BUFFER_LENGTH 4*1024 //4 KB
 
-#define ROOT_FOLDER "/home/saman/tmp/www"
+#define ROOT_FOLDER "/home/sbarghi/tmp/www"
 
 /* HTTP responses*/
 #define RESPONSE_METHOD_NOT_ALLOWED "HTTP/1.1 405 Method Not Allowed\r\n"
@@ -32,6 +32,7 @@
 // To avoid complication only return a html files (a single index.html file will be servred)
 #define RESPONSE_OK "HTTP/1.1 200 OK\r\n" \
                     "Content-Type: text/html\r\n" \
+                    "Content-Length: 20\r\n" \
                     "\r\n"
 
 #define CONTENT "<p>Hello World!</p>"
@@ -176,18 +177,19 @@ int on_url(http_parser* parser, const char* header, long unsigned int size){
         char file_path[255];
         make_path_from_url(URL, file_path);
        //open the file
-        file_size = read_file_content(file_path, &buffer);
+       // file_size = read_file_content(file_path, &buffer);
 
         //If we fail to open the file, simply return 404 !
-        if(file_size == -1){
+        //if(file_size == -1){
 
-            writen(*cconn, RESPONSE_NOT_FOUND, sizeof(RESPONSE_NOT_FOUND));
-        }else{
+        //    writen(*cconn, RESPONSE_NOT_FOUND, sizeof(RESPONSE_NOT_FOUND));
+        //}else{
         	//If file exists write the response type and file content to socket
         	writen(*cconn, RESPONSE_OK, sizeof(RESPONSE_OK));
-        	writen(*cconn, buffer, file_size);
-        	free(buffer); //buffer is being calloced inside read_file_content
-        }
+        //	writen(*cconn, buffer, file_size);
+        	writen(*cconn, CONTENT, sizeof(CONTENT));
+        //	free(buffer); //buffer is being calloced inside read_file_content
+        //}
 
     }else{
         //Method is not allowed
@@ -241,9 +243,17 @@ int main() {
     struct sockaddr_in serv_addr; //structure containing an internet address
     bzero((char*) &serv_addr, sizeof(serv_addr));
 
-    //Cluster cluster;
-    kThread kta(Cluster::getDefaultCluster());
-    kThread ktb(Cluster::getDefaultCluster());
+    Cluster cluster;
+    kThread kta(cluster);
+    kThread ktb(cluster);
+    kThread ktd(cluster);
+    kThread kte(cluster);
+    kThread ktf(cluster);
+    kThread ktg(cluster);
+    kThread kth(cluster);
+    kThread kti(cluster);
+
+
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -260,10 +270,10 @@ int main() {
             LOG_ERROR("Error on binding");
             exit(1);
         };
-        sconn->listen(128);
+        sconn->listen(65535);
         while(1) {
-                Connection* cconn  = sconn->accept((struct sockaddr*)nullptr, nullptr);
-                uThread::create()->start(Cluster::getDefaultCluster(), (void*)handle_connection, (void*)cconn);
+                Connection* cconn  = sconn->accept((struct sockaddr*)nullptr, nullptr, cluster);
+                uThread::create()->start(cluster, (void*)handle_connection, (void*)cconn);
         }
         sconn->close();
     }catch(std::system_error& error){
