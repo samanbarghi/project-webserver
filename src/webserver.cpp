@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <sstream>
 
 #include "../include/http_parser.h"
 
@@ -31,13 +32,13 @@
 
 // To avoid complication only return a html files (a single index.html file will be servred)
 #define RESPONSE_OK "HTTP/1.1 200 OK\r\n" \
+                    "Content-Length: 21\r\n" \
                     "Content-Type: text/html\r\n" \
                     "Connection: keep-alive\r\n" \
                     "Server: uThreads-http\r\n" \
-                    "Content-Length: 19\r\n" \
                     "\r\n"
 
-#define CONTENT "<p>Hello World!</p>"
+#define CONTENT "<p>Hello World!</p>\n"
 
 /* Logging */
 #define LOG(msg) puts(msg);
@@ -224,6 +225,8 @@ void *handle_connection(void *arg){
     //my_data->url = (char*)malloc(sizeof(char)* 255);
 	my_data->url = nullptr;
 
+	std::stringstream ss;
+
 
     http_parser *parser = (http_parser *) malloc(sizeof(http_parser));
     if(parser == nullptr)
@@ -258,7 +261,7 @@ void *handle_connection(void *arg){
             break;
         }*/
         nparsed = http_parser_execute(parser, &settings, buffer, nrecvd);
-        if(!my_data->keep_alive || nrecvd == 0) break;
+        if(nrecvd == 0) break;
         if(nparsed != nrecvd){
             LOG_ERROR("Erorr in Parsing the request!");
         }else{
@@ -272,7 +275,7 @@ void *handle_connection(void *arg){
                 strcpy(result, RESPONSE_OK);
                 strcat(result, CONTENT);
 
-                writen(*cconn, result, sizeof(RESPONSE_OK)+sizeof(CONTENT));
+                writen(*cconn, result, sizeof(RESPONSE_OK)+sizeof(CONTENT)-1);
             }else{
                 //Method is not allowed
                 writen(*cconn, RESPONSE_METHOD_NOT_ALLOWED, sizeof(RESPONSE_METHOD_NOT_ALLOWED));
@@ -282,7 +285,6 @@ void *handle_connection(void *arg){
         my_data->url_length =0;
     }while(my_data->keep_alive);
 
-    printf("Close Connection\n");
     cconn->close();
     delete cconn;
     free(parser);
